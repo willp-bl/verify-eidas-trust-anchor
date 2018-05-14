@@ -44,7 +44,8 @@ public class CountryTrustAnchor {
 
     RSAPublicKey publicKey = (RSAPublicKey) certificates.get(0).getPublicKey();
 
-      List<Base64> encodedSortedCertChain = CertificateSorter.sort(certificates).stream()
+      List<X509Certificate> sortedCerts = CertificateSorter.sort(certificates);
+      List<Base64> encodedSortedCertChain = sortedCerts.stream()
               .map(certificate -> {
       try {
         return Base64.encode(certificate.getEncoded());
@@ -80,7 +81,7 @@ public class CountryTrustAnchor {
   }
 
   public static Collection<String> findErrors(JWK anchor) {
-    Collection<String> errors = new HashSet<String>();
+    Collection<String> errors = new HashSet<>();
 
     if (!isKeyTypeRSA(anchor)) {
       errors.add(String.format("Expecting key type to be %s, was %s", KeyType.RSA, anchor.getKeyType()));
@@ -108,18 +109,17 @@ public class CountryTrustAnchor {
       X509Certificate x509Certificate = getX509Certificate(anchor.getX509CertChain().get(0));
 
       if (!x509Certificate.getPublicKey().equals(((RSAKey) anchor).toPublicKey())) {
-        errors.add(String.format("X.509 Certificate does not match the public key"));
+        errors.add("X.509 Certificate does not match the public key");
       }
       for (Base64 base64cert : anchor.getX509CertChain()) {
-        X509Certificate certificate = getX509Certificate(base64cert);
-        certificate.checkValidity();
+          getX509Certificate(base64cert).checkValidity();
       }
     } catch (CertificateExpiredException e) {
-      errors.add(String.format("X.509 certificate has expired", e.getMessage()));
+      errors.add(String.format("X.509 certificate has expired: %s", e.getMessage()));
     } catch (JOSEException e) {
-      errors.add(String.format("Error getting public key from trust anchor", e.getMessage()));
+      errors.add(String.format("Error getting public key from trust anchor: %s", e.getMessage()));
     } catch (CertificateException e) {
-      errors.add(String.format("X.509 certificate factory not available", e.getMessage()));
+      errors.add(String.format("X.509 certificate factory not available: %s", e.getMessage()));
     }
     return errors;
   }
