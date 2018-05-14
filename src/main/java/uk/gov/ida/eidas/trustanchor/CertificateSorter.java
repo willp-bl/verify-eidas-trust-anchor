@@ -20,14 +20,14 @@ public class CertificateSorter {
 
         return certificates.stream()
                 .filter(c -> !issuers.contains(c.getSubjectX500Principal()))
-                .reduce(limitToOneChild())
+                .reduce(limitToOneChild("Found multiple certificates without issuers"))
                 .map(getSortedChain(certificates))
                 .orElse(new LinkedList<>());
     }
 
-    private static BinaryOperator<X509Certificate> limitToOneChild() {
+    private static BinaryOperator<X509Certificate> limitToOneChild(String message) {
         return (element, otherElement) -> {
-            throw new IllegalArgumentException("Found multiple certificates without issuers");
+            throw new IllegalArgumentException(message);
         };
     }
 
@@ -55,7 +55,7 @@ public class CertificateSorter {
     private static List<X509Certificate> findParent(X509Certificate firstCert, List<X509Certificate> x509Certificates) {
         return x509Certificates.stream()
                 .filter(cert -> Objects.equals(cert.getSubjectX500Principal(), firstCert.getIssuerX500Principal()))
-                .findFirst()
+                .reduce(limitToOneChild("Found multiple parents for certificate [" + firstCert.getIssuerX500Principal() + "]"))
                 .map(getSortedChain(x509Certificates))
                 .orElse(new LinkedList<>());
     }
