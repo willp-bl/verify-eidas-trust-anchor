@@ -1,13 +1,11 @@
 package uk.gov.ida.eidas.trustanchor;
 
-import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.jwk.JWK;
-import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.util.Base64;
 
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.PublicKey;
 import java.security.SignatureException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateExpiredException;
@@ -17,45 +15,35 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-class JwkValidator {
-    static Collection<String> checkCertificateValidity(JWK anchor) {
+class CertificateValidator {
+
+    private final Base64X509CertificateDecoder decoder;
+
+    CertificateValidator(Base64X509CertificateDecoder decoder){
+            this.decoder = decoder;
+    }
+
+    Collection<String> checkCertificateValidity(List<Base64> x509CertChain, PublicKey publicKey) {
         List<String> errors = new ArrayList<>();
-        Base64X509CertificateDecoder decoder;
-        try {
-            decoder = new Base64X509CertificateDecoder();
-        } catch (CertificateException e) {
-            errors.add(String.format("X.509 certificate factory not available: %s", e.getMessage()));
-            return errors;
-        }
 
         X509Certificate x509Certificate;
         try {
-            x509Certificate = decoder.decodeX509(anchor.getX509CertChain().get(0));
+            x509Certificate = decoder.decodeX509(x509CertChain.get(0));
         } catch (CertificateException e) {
             errors.add(String.format("Unable to decode x509 Certificate: %s", e.getMessage()));
             return errors;
         }
 
-        try {
-            boolean certDoesntMatchPublicKey = certDoesntMatchPublicKey((RSAKey) anchor, x509Certificate);
-            if (certDoesntMatchPublicKey) {
-                errors.add("X.509 Certificate does not match the public key");
-            }
-        } catch (JOSEException e) {
-            errors.add(String.format("Error getting public key from trust anchor: %s", e.getMessage()));
-            return errors;
+        if (!x509Certificate.getPublicKey().equals(publicKey)) {
+            errors.add("X.509 Certificate does not match the public key");
         }
 
-        errors.addAll(validateCertChain(decoder, x509Certificate, anchor.getX509CertChain()));
+        errors.addAll(validateCertChain(x509Certificate, x509CertChain));
 
         return errors;
     }
 
-    private static boolean certDoesntMatchPublicKey(RSAKey anchor, X509Certificate x509Certificate) throws JOSEException {
-        return !x509Certificate.getPublicKey().equals(anchor.toPublicKey());
-    }
-
-    private static List<String> validateCertChain(Base64X509CertificateDecoder decoder, X509Certificate x509Certificate, List<Base64> x509CertChain) {
+    private List<String> validateCertChain(X509Certificate x509Certificate, List<Base64> x509CertChain) {
         List<String> chainErrors = new ArrayList<>();
         X509Certificate signedCert = x509Certificate;
         for (Base64 base64cert : x509CertChain) {
@@ -64,9 +52,7 @@ class JwkValidator {
                 signingCert = decoder.decodeX509(base64cert);
             } catch (CertificateException e) {
                 chainErrors.add(String.format("Unable to decode certificate %s: %s", base64cert, e.getMessage()));
-
-                //TODO Should this be a return? i.e. do we stop everything if we can't decode a cert in the chain?
-                continue;
+                return chainErrors;
             }
 
             List<String> certErrors = validateCert(signingCert);
@@ -83,7 +69,7 @@ class JwkValidator {
         return chainErrors;
     }
 
-    private static List<String> validateCert(X509Certificate signingCert) {
+    private List<String> validateCert(X509Certificate signingCert) {
         List<String> certErrors = new ArrayList<>();
         try {
             signingCert.checkValidity();
@@ -100,7 +86,7 @@ class JwkValidator {
         return certErrors;
     }
 
-    private static List<String> verifySignature(X509Certificate signedCert, X509Certificate signingCert) {
+    private List<String> verifySignature(X509Certificate signedCert, X509Certificate signingCert) {
         List<String> signatureErrors = new ArrayList<>();
         try {
             signedCert.verify(signingCert.getPublicKey());

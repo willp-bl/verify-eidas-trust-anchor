@@ -12,11 +12,10 @@ import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
 import java.text.ParseException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -38,8 +37,7 @@ public class CountryTrustAnchor {
 
     RSAPublicKey publicKey = (RSAPublicKey) certificates.get(0).getPublicKey();
 
-      List<X509Certificate> sortedCerts = CertificateSorter.sort(certificates);
-      List<Base64> encodedSortedCertChain = sortedCerts.stream()
+      List<Base64> encodedSortedCertChain = CertificateSorter.sort(certificates).stream()
               .map(certificate -> {
       try {
         return Base64.encode(certificate.getEncoded());
@@ -48,14 +46,14 @@ public class CountryTrustAnchor {
       }
     }).collect(Collectors.toList());
 
-    JWK key = new RSAKey.Builder(publicKey)
+      RSAKey key = new RSAKey.Builder(publicKey)
       .algorithm(JWSAlgorithm.RS256)
       .keyOperations(Collections.singleton(KeyOperation.VERIFY))
       .keyID(keyId)
       .x509CertChain(encodedSortedCertChain)
       .build();
 
-    Collection<String> errors = findErrors(key);
+    Collection<String> errors = CountryTrustAnchorValidator.build().findErrors(key);
     if (!errors.isEmpty()) {
       throw new Error(String.format("Managed to generate an invalid anchor: %s", String.join(", ", errors)));
     }
@@ -64,70 +62,33 @@ public class CountryTrustAnchor {
   }
 
     public static JWK parse(String json) throws ParseException {
-    JWK key = JWK.parse(json);
+        JWK key = JWK.parse(json);
 
-    Collection<String> errors = findErrors(key);
-    if (!errors.isEmpty()) {
-      throw new ParseException(String.format("JWK was not a valid trust anchor: %s", String.join(", ", errors)), 0);
+        Collection<String> errors = findTrustAnchorErrors(key);
+
+        if (!errors.isEmpty()) {
+            throw new ParseException(String.format("JWK was not a valid trust anchor: %s", String.join(", ", errors)), 0);
+        }
+
+        return key;
     }
 
-    return key;
-  }
-
-  public static Collection<String> findErrors(JWK anchor) {
-    Collection<String> errors = new HashSet<>();
-
-    if (!isKeyTypeRSA(anchor)) {
-      errors.add(String.format("Expecting key type to be %s, was %s", KeyType.RSA, anchor.getKeyType()));
-    }
-    if (!isAlgorithmRS256(anchor)) {
-      errors.add(String.format("Expecting algorithm to be %s, was %s", JWSAlgorithm.RS256, anchor.getAlgorithm()));
-    }
-    if (!isKeyOperationsVerify(anchor)) {
-      errors.add(String.format("Expecting key operations to only contain %s", KeyOperation.VERIFY));
-    }
-    if (!isKeyIDPresent(anchor)) {
-      errors.add("Expecting a KeyID");
+    /**
+     * Deprecated - use {@link CountryTrustAnchorValidator} instead
+     */
+    @Deprecated
+    public static Collection<String> findErrors(JWK trustAnchor) {
+        return findTrustAnchorErrors(trustAnchor);
     }
 
-      if (hasCertificates(anchor)) {
-        errors.addAll(JwkValidator.checkCertificateValidity(anchor));
-      } else {
-        errors.add("Expecting at least one X.509 certificate");
-      }
-
-      return errors;
-  }
-
-    private static boolean isKeyTypeRSA(JWK anchor){
-	return Optional.ofNullable(anchor.getKeyType())
-			.map(type -> type.equals(KeyType.RSA))
-			.orElse(false);
-  }
-
-  private static boolean isAlgorithmRS256(JWK anchor){
-	return Optional.ofNullable(anchor.getAlgorithm())
-			.map(alg -> alg.equals(JWSAlgorithm.RS256))
-			.orElse(false);
-  }
-
-  private static boolean isKeyOperationsVerify(JWK anchor){
-    return Optional.ofNullable(anchor.getKeyOperations())
-    		.filter(ops -> ops.size() == 1)
-    		.map(ops -> ops.contains(KeyOperation.VERIFY))
-    		.orElse(false);
-  }
-
-  private static boolean isKeyIDPresent(JWK anchor){
-    return Optional.ofNullable(anchor.getKeyID())
-    		.map(kid -> !kid.isEmpty())
-    		.orElse(false);
-  }
-
-  private static boolean hasCertificates(JWK anchor){
-    return Optional.ofNullable(anchor.getX509CertChain())
-    		.map(certChain -> certChain.size() > 0)
-    		.orElse(false);
-  }
-
+    private static Collection<String> findTrustAnchorErrors(JWK trustAnchor) {
+        Collection<String> errors;
+        if (trustAnchor instanceof RSAKey) {
+            errors = CountryTrustAnchorValidator.build().findErrors((RSAKey) trustAnchor);
+        } else {
+            errors = new ArrayList<>();
+            errors.add(String.format("Expecting key type to be %s, was %s", KeyType.RSA, trustAnchor.getKeyType()));
+        }
+        return errors;
+    }
 }
