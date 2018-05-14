@@ -1,6 +1,5 @@
 package uk.gov.ida.eidas.trustanchor;
 
-import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.KeyOperation;
@@ -8,13 +7,8 @@ import com.nimbusds.jose.jwk.KeyType;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.util.Base64;
 
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
 import java.security.PublicKey;
 import java.security.cert.CertificateEncodingException;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateExpiredException;
-import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.security.interfaces.RSAPublicKey;
 import java.text.ParseException;
@@ -95,36 +89,17 @@ public class CountryTrustAnchor {
     if (!isKeyIDPresent(anchor)) {
       errors.add("Expecting a KeyID");
     }
-    if (!hasCertificates(anchor)) {
-      errors.add("Expecting at least one X.509 certificate");
-    } else {
-      errors.addAll(checkCertificateValidity(anchor, errors));
-    }
 
-    return errors;
+      if (hasCertificates(anchor)) {
+        errors.addAll(JwkValidator.checkCertificateValidity(anchor));
+      } else {
+        errors.add("Expecting at least one X.509 certificate");
+      }
+
+      return errors;
   }
 
-  private static Collection<String> checkCertificateValidity(JWK anchor, Collection<String> errors) {
-    try {
-      X509Certificate x509Certificate = getX509Certificate(anchor.getX509CertChain().get(0));
-
-      if (!x509Certificate.getPublicKey().equals(((RSAKey) anchor).toPublicKey())) {
-        errors.add("X.509 Certificate does not match the public key");
-      }
-      for (Base64 base64cert : anchor.getX509CertChain()) {
-          getX509Certificate(base64cert).checkValidity();
-      }
-    } catch (CertificateExpiredException e) {
-      errors.add(String.format("X.509 certificate has expired: %s", e.getMessage()));
-    } catch (JOSEException e) {
-      errors.add(String.format("Error getting public key from trust anchor: %s", e.getMessage()));
-    } catch (CertificateException e) {
-      errors.add(String.format("X.509 certificate factory not available: %s", e.getMessage()));
-    }
-    return errors;
-  }
-
-  private static boolean isKeyTypeRSA(JWK anchor){
+    private static boolean isKeyTypeRSA(JWK anchor){
 	return Optional.ofNullable(anchor.getKeyType())
 			.map(type -> type.equals(KeyType.RSA))
 			.orElse(false);
@@ -155,8 +130,4 @@ public class CountryTrustAnchor {
     		.orElse(false);
   }
 
-  private static X509Certificate getX509Certificate(Base64 base64) throws CertificateException {
-      InputStream certStream = new ByteArrayInputStream(base64.decode());
-      return (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(certStream);
-  }
 }
