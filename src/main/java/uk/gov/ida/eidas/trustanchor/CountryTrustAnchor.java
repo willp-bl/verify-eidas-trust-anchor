@@ -17,16 +17,15 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class CountryTrustAnchor {
 
   public static JWK make(List<X509Certificate> certificates, String keyId) {
-      Stream<X509Certificate> stream = certificates.stream();
-      List<PublicKey> invalidPublicKeys = stream
-            .map(X509Certificate::getPublicKey)
-            .filter(key -> !(key instanceof RSAPublicKey))
-            .collect(Collectors.toList());
+
+      List<PublicKey> invalidPublicKeys = certificates.stream()
+              .map(X509Certificate::getPublicKey)
+              .filter(key -> !(key instanceof RSAPublicKey))
+              .collect(Collectors.toList());
 
     if (!invalidPublicKeys.isEmpty()) {
       throw new RuntimeException(String.format(

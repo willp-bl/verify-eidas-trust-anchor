@@ -44,9 +44,12 @@ class CertificateValidator {
     }
 
     private List<String> validateCertChain(X509Certificate x509Certificate, List<Base64> x509CertChain) {
-        List<String> chainErrors = new ArrayList<>();
         X509Certificate signedCert = x509Certificate;
-        for (Base64 base64cert : x509CertChain) {
+
+        List<String> chainErrors = new ArrayList<>(validateCert(x509Certificate));
+
+        List<Base64> base64s = x509CertChain.subList(1, x509CertChain.size());
+        for (Base64 base64cert : base64s) {
             X509Certificate signingCert;
             try {
                 signingCert = decoder.decodeX509(base64cert);
@@ -55,8 +58,7 @@ class CertificateValidator {
                 return chainErrors;
             }
 
-            List<String> certErrors = validateCert(signingCert);
-            chainErrors.addAll(certErrors);
+            chainErrors.addAll(validateCert(signingCert));
 
             List<String> signatureErrors = verifySignature(signedCert, signingCert);
             chainErrors.addAll(signatureErrors);
@@ -74,7 +76,7 @@ class CertificateValidator {
         try {
             signingCert.checkValidity();
         } catch (CertificateExpiredException e) {
-            certErrors.add(String.format("Certificate %s is no longer valid: %s",
+            certErrors.add(String.format("X.509 certificate has expired (%s): %s",
                     signingCert.getSubjectX500Principal(), e.getMessage())
             );
         } catch (CertificateNotYetValidException e) {

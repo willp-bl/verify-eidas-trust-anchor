@@ -52,7 +52,7 @@ class CountryTrustAnchorValidator {
         }
 
         if (hasCertificates(anchor)) {
-            errors.addAll(validateCertificates(anchor, errors));
+            errors.addAll(validateCertificates(anchor));
         } else {
             errors.add("Expecting at least one X.509 certificate");
         }
@@ -60,7 +60,7 @@ class CountryTrustAnchorValidator {
         return errors;
     }
 
-    private Collection<String> validateCertificates(RSAKey anchor, Collection<String> errors) {
+    private Collection<String> validateCertificates(RSAKey anchor) {
         PublicKey publicKey;
         try {
             publicKey = anchor.toPublicKey();

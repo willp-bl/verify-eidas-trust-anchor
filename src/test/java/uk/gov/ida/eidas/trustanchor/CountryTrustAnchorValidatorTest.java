@@ -5,9 +5,13 @@ import com.google.common.collect.ImmutableSet;
 import com.nimbusds.jose.jwk.KeyType;
 import com.nimbusds.jose.jwk.RSAKey;
 import com.nimbusds.jose.util.Base64;
+import com.nimbusds.jose.util.Base64URL;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigInteger;
+import java.security.PublicKey;
+import java.security.interfaces.RSAPublicKey;
 import java.util.Collection;
 
 import static com.nimbusds.jose.JWSAlgorithm.RS256;
@@ -28,7 +32,7 @@ public class CountryTrustAnchorValidatorTest {
     }
 
     @Test
-    public void validTrustAnchorShouldRaiseNoExceptions(){
+    public void validTrustAnchorShouldRaiseNoExceptions() {
         RSAKey validTrustAnchor = getValidTrustAnchor();
         Collection<String> errors = testValidator.findErrors(validTrustAnchor);
 
@@ -36,14 +40,17 @@ public class CountryTrustAnchorValidatorTest {
     }
 
     private RSAKey getValidTrustAnchor() {
-        RSAKey mockTrustAnchor = mock(RSAKey.class);
-        when(mockTrustAnchor.getKeyID()).thenReturn("TestId");
-        Base64 mockX509Cert = mock(Base64.class);
-        when(mockTrustAnchor.getX509CertChain()).thenReturn(ImmutableList.of(mockX509Cert));
-        when(mockTrustAnchor.getAlgorithm()).thenReturn(RS256);
-        when(mockTrustAnchor.getKeyType()).thenReturn(KeyType.RSA);
-        when(mockTrustAnchor.getKeyOperations()).thenReturn(ImmutableSet.of(VERIFY));
 
-        return mockTrustAnchor;
+        RSAPublicKey mockPublicKey = mock(RSAPublicKey.class);
+        BigInteger value = BigInteger.valueOf(2).pow(512);
+        value.bitLength();
+        when(mockPublicKey.getModulus()).thenReturn(value);
+        when(mockPublicKey.getPublicExponent()).thenReturn(BigInteger.valueOf(512));
+        return new RSAKey.Builder(mockPublicKey)
+                .keyID("TestId")
+                .x509CertChain(ImmutableList.of(mock(Base64.class)))
+                .algorithm(RS256)
+                .keyOperations(ImmutableSet.of(VERIFY))
+                .build();
     }
 }
